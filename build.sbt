@@ -9,3 +9,6 @@ scalacOptions ++= Seq(
   "-deprecation",
   "-unchecked")
 
+libraryDependencies ++= Seq(
+  "org.scalaz" %% "scalaz-core" % "7.2.0"
+)
