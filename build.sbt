@@ -11,4 +11,6 @@ scalacOptions ++= Seq(
   "-language:postfixOps",
   "-language:higherKinds")
 
+libraryDependencies += "io.monix" %% "monix" % "2.1.2" withSources() withJavadoc()
+
 
