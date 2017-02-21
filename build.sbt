@@ -1,4 +1,4 @@
-name := "experiments"
+name := "akka-experiments"
 
 version := "0.1"
 
@@ -11,4 +11,4 @@ scalacOptions ++= Seq(
   "-language:postfixOps",
   "-language:higherKinds")
 
-
+libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.4.17"
