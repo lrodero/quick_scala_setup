@@ -11,4 +11,5 @@ scalacOptions ++= Seq(
   "-language:postfixOps",
   "-language:higherKinds")
 
+libraryDependencies += "com.typesafe" % "config" % "1.3.1" withSources() withJavadoc()
 
