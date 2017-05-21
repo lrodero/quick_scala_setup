@@ -13,14 +13,13 @@ class Conf(args: Seq[String]) extends ScallopConf(args) {
   import Conf._
 
   footer("\n (c) Qvantel. Created by Qvantel Madrid Operations, Applications Group.")
-  banner("""
-    |Utility to mine xdr files.
+  banner("""Utility to mine xdr files.
     |Usage:
     |       mine [opts] --regexp <regexp to mine>
     |Examples:
     |       mine --names "**.add" --regexp 1234 // recursively lookup for all *.add files from current folder containing 1234
     |       mine --names "*.add" --regexp 1234  // lookup for all *.add files in current folder containing 1234
-    |       mine --cols 0 1 --names "**.add" --regexp 1234  // lookup for all *.add files in current folder containing 1234 in their two first columns
+    |       mine --cols 0 1 --names "**.add" --regexp 1234 data  // lookup for all *.add files in data folder containing 1234 in their two first columns
     """.stripMargin)
   val help = opt[Boolean](noshort=true, default=Some(false), descr="Print this message and quit.")
   val sep = opt[String](noshort=true, default=Some(DEFAULT_FIELD_SEPARATOR), descr=s"Fields separator, defaults to '$DEFAULT_FIELD_SEPARATOR'.", argName="sep")
