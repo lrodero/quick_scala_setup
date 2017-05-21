@@ -25,4 +25,31 @@ class HomeController @Inject() extends Controller {
     Ok(views.html.hello(name))
   }
 
+  def echo = Action { implicit request =>
+    Ok("Got request [" + request + "]")
+  }
+
+  def jsonEcho = Action(parse.json) { implicit request =>
+    Ok("Got request [" + request + "]")
+  }
+
+  def helloResult = Action {
+    import play.api.http.HttpEntity
+    import akka.util.ByteString
+    Result(
+      header = ResponseHeader(200, Map.empty),
+      body = HttpEntity.Strict(ByteString("Hello World!"), Some("text/plain"))
+    )
+  }
+
+  def notFound = Action {
+    NotFound(<h1>Page not found</h1>)
+  }
+
+  def redirection = Action {
+    Redirect("/hello") // Path that in 'routes' points to hello method in this class
+  }
+
+  def todo = TODO
+
 }

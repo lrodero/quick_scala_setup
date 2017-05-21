@@ -4,7 +4,17 @@
 
 # An example controller showing a sample home page
 GET     /                           controllers.HomeController.index
-GET     /hello                      controllers.HomeController.hello(n: String)
+GET     /hello                      controllers.HomeController.hello(name: String)
+GET     /hello/:name                controllers.HomeController.hello(name: String)
+
+# Added routes for code taken from Play for Scala manual 
+GET     /echo                       controllers.HomeController.echo
+GET     /jsonEcho                   controllers.HomeController.jsonEcho
+GET     /helloResult                controllers.HomeController.helloResult
+GET     /nothing                    controllers.HomeController.notFound
+GET     /redirection                controllers.HomeController.redirection
+
+
 # An example controller showing how to use dependency injection
 GET     /count                      controllers.CountController.count
 # An example controller showing how to write asynchronous code
