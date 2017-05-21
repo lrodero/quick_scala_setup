@@ -8,6 +8,7 @@ object Conf {
   val DEFAULT_PATHS_TO_MINE = "." :: Nil
 }
 
+/**Object to read configuration from console, based on ScallopConf */
 class Conf(args: Seq[String]) extends ScallopConf(args) {
 
   import Conf._
@@ -18,12 +19,12 @@ class Conf(args: Seq[String]) extends ScallopConf(args) {
   banner("""Utility to mine xdr files.
     |
     |Usage:
-    |       mine [opts] --regexp <regexp to mine> [paths to mine]
+    |       miner [opts] --regexp <regexp to mine> [paths to mine]
     |
     |Usage examples:
-    |       mine --names "**.add" --regexp 1234 // recursively lookup for all *.add files from current folder containing 1234
-    |       mine --names "*.add" --regexp 1234  // lookup for all *.add files in current folder containing 1234
-    |       mine --cols 0 1 --names "**.add" --regexp 1234 data  // lookup for all *.add files in data folder containing 1234 in their two first columns
+    |       miner --names "**.add" --regexp 1234 // recursively lookup for all *.add files from current folder containing 1234
+    |       miner --names "*.add" --regexp 1234  // lookup for all *.add files in current folder containing 1234
+    |       miner --cols 0 1 --names "**.add" --regexp 1234 data  // lookup for all *.add files in data folder containing 1234 in their two first columns
     """.stripMargin)
   val help = opt[Boolean](noshort=true, default=Some(false), descr="Print this message and quit.")
   val sep = opt[String](noshort=true, default=Some(DEFAULT_FIELD_SEPARATOR), descr=s"Fields separator, defaults to '$DEFAULT_FIELD_SEPARATOR'.", argName="sep")

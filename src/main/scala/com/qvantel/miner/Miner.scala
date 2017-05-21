@@ -86,23 +86,22 @@ object Miner {
     for(file <- files if(isText(file))) {
 
       val destFilteredFileO = copyFilteredToO.map(destFolder => destFolder/file.name)
-      for {
-        destFile <- destFilteredFileO.toIterator
-        matched = matchingLines(file, regexp, sep, colsO)
-        if(!matched.isEmpty)
-      } {
-        mkdirs(destFile.parent)
-        destFile.overwrite(matched.mkString(System.getProperty("line.separator")))
+      destFilteredFileO foreach { destFile =>
+        val matched = matchingLines(file, regexp, sep, colsO)
+        if(!matched.isEmpty) {
+          mkdirs(destFile.parent)
+          destFile.overwrite(matched.mkString(System.getProperty("line.separator")))
+        }
       }
 
       val destFileO = copyToO.map(destFolder => destFolder/file.name)
-      for {
-        destFile <- destFileO
-        if(containsMatchingLine(file, regexp, sep, colsO))
-      } {
-        mkdirs(destFile.parent)
-        cp(file, destFile)
+      destFileO foreach { destFile =>
+        if(containsMatchingLine(file, regexp, sep, colsO)) {
+          mkdirs(destFile.parent)
+          cp(file, destFile)
+        }
       }
+
     }
   }
 }
