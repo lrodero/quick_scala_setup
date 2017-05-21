@@ -12,10 +12,13 @@ class Conf(args: Seq[String]) extends ScallopConf(args) {
 
   import Conf._
 
-  footer("\n (c) Qvantel. Created by Qvantel Madrid Operations, Applications Group.")
+  footer("""
+    | (c) Qvantel. Created by Qvantel Madrid Operations, Applications Group.
+    |
+    """.stripMargin)
   banner("""Utility to mine xdr files.
     |Usage:
-    |       mine [opts] --regexp <regexp to mine>
+    |       mine [opts] --regexp <regexp to mine> [paths to mine]
     |Examples:
     |       mine --names "**.add" --regexp 1234 // recursively lookup for all *.add files from current folder containing 1234
     |       mine --names "*.add" --regexp 1234  // lookup for all *.add files in current folder containing 1234
