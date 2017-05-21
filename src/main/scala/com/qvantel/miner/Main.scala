@@ -14,12 +14,13 @@ class Conf(args: Seq[String]) extends ScallopConf(args) {
 
   footer("""
     | (c) Qvantel. Created by Qvantel Madrid Operations, Applications Group.
-    |
     """.stripMargin)
   banner("""Utility to mine xdr files.
+    |
     |Usage:
     |       mine [opts] --regexp <regexp to mine> [paths to mine]
-    |Examples:
+    |
+    |Usage examples:
     |       mine --names "**.add" --regexp 1234 // recursively lookup for all *.add files from current folder containing 1234
     |       mine --names "*.add" --regexp 1234  // lookup for all *.add files in current folder containing 1234
     |       mine --cols 0 1 --names "**.add" --regexp 1234 data  // lookup for all *.add files in data folder containing 1234 in their two first columns
