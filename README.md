@@ -8,27 +8,11 @@ Utility to 'mine' data in xdr files and others (`.add`, `.unl`, `.UNL`...).
 ** Print only file names to `sdtout`
 ** Copy matching files to a given folder, optionally only the matching lines are copied
 
-###Examples of use:
-
+## To create executable
 ```bash
-# mine for id 1234567890, recursively in path/to/folder and also in all *add files in this folder
-mine --for 123456789 --in path/to/folder *.add
+sbt assembly
 ```
+Executable will be in `target/scala-2.12/miner`
 
-###Usage
-```
-mine [opts] --for [string or regexp to mine] 
-
-Options:
--h --help This message
--s --sep [char] Fields separator, defaults to '|'
--n --norec Turn off recursion when exploring folders
--r --regexp String to lookfor is a regexp
--l --lines Print matching lines to stdout (default if no opt is given)
--L --lines-with-filename Print matching lines with filename appended as a new field at the end
--c --copy [folder] Copy matching files to folder
--C --copy-filter [folder] Copy matching files, but filter out lines that do not match
--i --in [folders and files] Folders and files to mine. Defaults to '.'
--f --for [string] Mandatory, string or regexp to mine
-```
+Once the executable is created, run `miner --help` to see the program arguments.
 
