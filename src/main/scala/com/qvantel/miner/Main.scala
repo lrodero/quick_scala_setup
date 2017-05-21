@@ -4,7 +4,7 @@ import org.rogach.scallop._
 import scala.util.{Try, Success, Failure}
 
 object Conf {
-  val DEFAULT_FIELD_SEPARATOR = "|"
+  val DEFAULT_FIELD_SEPARATOR = "\\|"
   val DEFAULT_PATHS_TO_MINE = "." :: Nil
 }
 

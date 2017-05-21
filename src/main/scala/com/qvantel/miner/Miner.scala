@@ -38,23 +38,32 @@ object Miner {
 
   /**Returns true if it the line contains any field (line is splitted using given sep) that matches the regexp. If cols is defined only fields in those cols are checked.
    */
-  private def lineMatches(line: String, regexp: String, sep: String, colsO: Option[List[Int]]): Boolean = colsO match {
-    case None => line.split(sep).exists((f:String) => f.matches(regexp))
-    case Some(cols) => {
-      val fields = line.split(sep)
-      cols.filter(_ < fields.size).exists((c:Int) => fields(c).matches(regexp))
+  private def lineMatches(line: String, regexp: String, sep: String, colsO: Option[List[Int]]): Boolean = {
+    colsO match {
+      case None => line.split(sep).exists((s:String) => s.matches(regexp))
+      case Some(cols) => {
+        val fields = line.split(sep)
+        cols.filter(_ < fields.size).exists((c:Int) => fields(c).matches(regexp))
+      }
     }
   }
 
+  /**Check whether file 'looks like' a text file or not... cheap way, it is not
+   * guaranteed to work*/
+  private def isText(file: File): Boolean = 
+    Try{
+      val iter = file.lineIterator
+      if(iter.hasNext)
+        iter.next
+    }.isSuccess
+
   /** Returns all matching lines in file */
-  private def matchingLines(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Iterator[String] = {
-    Try{file.lineIterator.filter((l: String) => lineMatches(l, regexp, sep, colsO))}
-      .recover{case (_:Throwable) => List.empty[String].toIterator}.get
-  }
+  private def matchingLines(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Iterator[String] =
+    file.lineIterator.filter((l: String) => lineMatches(l, regexp, sep, colsO))
 
   /** Returns true if file contains at least one matching line */
-  private def containsMatchingLine(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Boolean = 
-    file.lineIterator.contains((l: String) => lineMatches(l, regexp, sep, colsO))
+  private def containsMatchingLine(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Boolean =
+    file.lineIterator.exists((l: String) => lineMatches(l, regexp, sep, colsO))
 
   /**'Core' of the miner, this funcion does the mining: it first computes
    * the list of files to mine and then checks them against the regexp
@@ -71,27 +80,29 @@ object Miner {
     val regexp: String = conf.regexp()
     val sep: String = conf.sep()
     val colsO: Option[List[Int]] = conf.cols.toOption
-    val copyFilteredToO: Option[String] = conf.copyTo.toOption
+    val copyFilteredToO: Option[String] = conf.copyFilteredTo.toOption
     val copyToO: Option[String] = conf.copyTo.toOption
 
-    for(file <- files) {
-      /* If 'print' or 'copyFilteredTo' are set, then we are
-       * interested in the matching lines of each file, if any.
-       */
+    for(file <- files if(isText(file))) {
+
       val destFilteredFileO = copyFilteredToO.map(destFolder => destFolder/file.name)
       for {
-        destFile <- destFilteredFileO
-        line <- matchingLines(file, regexp, sep, colsO)
-      } destFile append line
+        destFile <- destFilteredFileO.toIterator
+        matched = matchingLines(file, regexp, sep, colsO)
+        if(!matched.isEmpty)
+      } {
+        mkdirs(destFile.parent)
+        destFile.overwrite(matched.mkString(System.getProperty("line.separator")))
+      }
 
-      /* If 'copy', then it is enough to know whether each
-       * file contains any mathing line or not.
-       */
       val destFileO = copyToO.map(destFolder => destFolder/file.name)
       for {
         destFile <- destFileO
         if(containsMatchingLine(file, regexp, sep, colsO))
-      } cp(file, destFile)
+      } {
+        mkdirs(destFile.parent)
+        cp(file, destFile)
+      }
     }
   }
 }
