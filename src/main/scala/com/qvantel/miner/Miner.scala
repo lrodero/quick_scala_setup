@@ -3,7 +3,9 @@ package com.qvantel.miner
 import org.rogach.scallop._
 import better.files._
 import better.files.Dsl._
+import better.files.Implicits
 import java.io.{File => JFile}
+//import scala.collection.JavaConverters._
 
 import scala.collection.mutable
 import scala.util.Try
@@ -59,11 +61,11 @@ object Miner {
 
   /** Returns all matching lines in file */
   private def matchingLines(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Iterator[String] =
-    file.lineIterator.filter((l: String) => lineMatches(l, regexp, sep, colsO))
+    file.lines.filter((l: String) => lineMatches(l, regexp, sep, colsO)).toIterator // Calling lines() instead of linesIterator() makes sure that the file is closed once is read
 
   /** Returns true if file contains at least one matching line */
   private def containsMatchingLine(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Boolean =
-    file.lineIterator.exists((l: String) => lineMatches(l, regexp, sep, colsO))
+    file.lines.exists((l: String) => lineMatches(l, regexp, sep, colsO)) // Calling lines() instead of linesIterator() makes sure that the file is closed once is read
 
   /**'Core' of the miner, this funcion does the mining: it first computes
    * the list of files to mine and then checks them against the regexp
