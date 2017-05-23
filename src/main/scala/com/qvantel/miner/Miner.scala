@@ -5,7 +5,8 @@ import better.files._
 import better.files.Dsl._
 import better.files.Implicits
 import java.io.{File => JFile}
-//import scala.collection.JavaConverters._
+import java.nio.file.{Files => JFiles}
+import scala.collection.JavaConverters._
 
 import scala.collection.mutable
 import scala.util.Try
@@ -52,20 +53,31 @@ object Miner {
 
   /**Check whether file 'looks like' a text file or not... cheap way, it is not
    * guaranteed to work*/
-  private def isText(file: File): Boolean = 
+  private def isText(file: File): Boolean =
     Try{
-      val iter = file.lineIterator
-      if(iter.hasNext)
-        iter.next
+      val stream = JFiles.lines(file.toJava.toPath)
+      stream.findFirst()
+      stream.close()
     }.isSuccess
 
   /** Returns all matching lines in file */
-  private def matchingLines(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Iterator[String] =
-    file.lines.filter((l: String) => lineMatches(l, regexp, sep, colsO)).toIterator // Calling lines() instead of linesIterator() makes sure that the file is closed once is read
+  private def matchingLines(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Iterator[String] = {
+    val stream = JFiles.lines(file.toJava.toPath)
+    val lines: List[String] = stream.collect(java.util.stream.Collectors.toList()).asScala.toList
+    stream.close()
+    lines.iterator.filter((l: String) => lineMatches(l, regexp, sep, colsO))
+    //file.lines.filter((l: String) => lineMatches(l, regexp, sep, colsO)).toIterator // Calling lines() instead of linesIterator() makes sure that the file is closed once is read
+  }
 
   /** Returns true if file contains at least one matching line */
-  private def containsMatchingLine(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Boolean =
-    file.lines.exists((l: String) => lineMatches(l, regexp, sep, colsO)) // Calling lines() instead of linesIterator() makes sure that the file is closed once is read
+  private def containsMatchingLine(file: File, regexp: String, sep: String, colsO: Option[List[Int]]): Boolean = {
+    val stream = JFiles.lines(file.toJava.toPath)
+    val lines: List[String] = stream.collect(java.util.stream.Collectors.toList()).asScala.toList
+    val contains: Boolean = lines.exists((l: String) => lineMatches(l, regexp, sep, colsO))
+    stream.close()
+    contains
+    //file.lines.exists((l: String) => lineMatches(l, regexp, sep, colsO)) // Calling lines() instead of linesIterator() makes sure that the file is closed once is read
+  }
 
   /**'Core' of the miner, this funcion does the mining: it first computes
    * the list of files to mine and then checks them against the regexp
