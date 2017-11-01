@@ -1,4 +1,3 @@
-# Quick Scala Setup
-Quick sbt-based Scala setup to be used:
-* For quick experimentation of new ideas/technologies in new branches
-* As the basis of _proper_ new Scala/sbt projects, by cloning this repo
+# Exercises for 'Functional Programming for Mortals' book
+
+[Book online](https://leanpub.com/fpmortals/read)
