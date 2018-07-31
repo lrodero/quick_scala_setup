@@ -45,6 +45,18 @@ object Main extends App {
       mt <- M.getTime
     } yield WorldView(db, da, mm, ma, Map.empty, mt)
 
+    def update(old: WorldView): F[WorldView] = for {
+      snap <- initial
+      changed = symdiff(snap.alive.keySet, old.alive.keySet)
+      pending = (old.pending -- changed).filterNot {
+        case (_, started) => started.diff(snap.time) >= 10.minutes
+      }
+      update = snap.copy(pending = pending)
+    } yield update
+
+    private def symdiff[A](s1: Set[A], s2: Set[A]): Set[A] =
+      (s1 union s2) -- (s1 intersect s2)
+
   }
 }
 
