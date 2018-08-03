@@ -69,9 +69,9 @@ object Main extends App {
   }
 
   // IO.suspend
-  def fibStackSafe(n: Int, a: Long, b: Long): IO[Long] = IO.suspend {
+  def fibStackSafe(n: Int, a: Long = 0, b: Long = 1): IO[Long] = IO.suspend {
     if (n > 1) fib(n-1, b, a+b)
-    else IO.pure(a)
+    else IO.pure(b)
   }
 
   def readLine(in: BufferedReader)(implicit ec: ExecutionContext): IO[String] = IO.cancelable[String] { cb =>
@@ -92,9 +92,80 @@ object Main extends App {
 
   }
 
+  def sleep(d: FiniteDuration)(implicit sc: ScheduledExecutorService): IO[Unit] = IO.cancelable { cb =>
+    val r = new Runnable{ def run() = cb(Right(())) }
+    val f = sc.schedule(r, d.length, d.unit)
+    IO(f.cancel(false))
+  }
+
   // Concurrent start+cancel
 
+  val launchMissiles = IO.raiseError{new Exception("boom!")}
+  val runToBunker = IO{println("To the bunker!")}
   
+  import scala.concurrent.ExecutionContext.Implicits.global
+  import cats.effect.syntax.all._
+  import cats.syntax.apply._
+  val conc = for {
+    fiber <- launchMissiles.start
+    _ <- runToBunker.handleErrorWith { error =>
+      fiber.cancel *> IO.raiseError(error)
+    }
+    aftermath <- fiber.join
+  } yield {
+    aftermath
+  }
+
+  //println(conc.unsafeRunSync()) <-- Won't catch the exception raised!
+  conc.runAsync {
+    case Left(e) => IO { println(s"ups: ${e.getMessage}") }
+    case Right(_) => IO { println("All was good") }
+  }.unsafeRunSync()
+
+  def delayedGreeting = IO.sleep(2.seconds) *> IO(println("hi!"))
+
+  val cancelDelayedGreeting = delayedGreeting.unsafeRunCancelable{
+    case Left(e) => println(s"Done: ${e.getMessage}")
+    case Right(r) => println(s"Done: $r")
+  }
+
+  cancelDelayedGreeting() // As we are cancelling, no msg will be shown
+
+  val delayedGreetingPureResult = delayedGreeting.runCancelable { r =>
+    IO { println(s"Done: $r") }
+  }
+
+  import cats.syntax.flatMap._
+  val cancelDelayedGreetingSafe = delayedGreetingPureResult.flatten
+
+  cancelDelayedGreetingSafe.unsafeRunSync() // As we are cancelling, no msg will be shown
+
+  // cancelBoundary, to make long IOs cancelable at intermediate steps
+  def fibWithCancelBoundary(n: Int, a: Long = 0, b: Long = 1): IO[Long] = IO.suspend {
+    if (n > 0) {
+      val nextFib = fibWithCancelBoundary(n - 1, b, a + b)
+      if(n % 100 != 0) nextFib
+      else IO.cancelBoundary *> nextFib
+    } else {
+      IO.pure(b)
+    }
+  }
+
+  println(s"Fib with cancel boundary: ${fibWithCancelBoundary(5).unsafeRunSync()}")
+
+
+  // bracket...
+  //
+
+  // Conversions
+
+  val ioFromFuture = IO.fromFuture(IO {
+    Future(println(s"I come from the future"))
+  })
+
+  ioFromFuture.unsafeRunSync()
+
+
   
 
 }
