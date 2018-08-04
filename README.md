@@ -1,4 +1,34 @@
 # Quick Scala Setup
-Quick sbt-based Scala setup to be used:
-* For quick experimentation of new ideas/technologies in new branches
-* As the basis of _proper_ new Scala/sbt projects, by cloning this repo
+
+This lib is an experiment to gain experience with cats effect library, specially with IO type.
+
+The goal is to create a set of utils to access 'endpoints', and endpoint being an abstraction of any entity data can be read/written from/to.
+
+Once given an endpoint, a Java's `BufferedReader` or `BufferedWriter` will be created to access to it. From there, using IO data will be read/written. 
+
+```scala
+
+val ep = Endpoint("file://whatever.txt")
+
+trait ToByteArray[A] {
+  implicit def toByteArray(a: A): Either[Throwable, ByteArray]
+}
+
+trait FromByteArray[A] {
+  val sizeInBytes: Int
+  implicit def fromByteArray(ba: ByteArray): Either[Throwable, A]
+}
+
+def read[A: FromByteArray]: IO[A]
+def write[A: ToByteArray](a: A): IO[Unit]
+
+
+
+val readLine: IO[String] = ep.readLine
+def writeLine(s: String): IO[Unit] = ep.writeLine(s)
+
+
+
+
+
+```
