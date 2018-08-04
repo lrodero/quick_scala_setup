@@ -155,7 +155,18 @@ object Main extends App {
 
 
   // bracket...
-  //
+  import java.io.{BufferedReader, File, FileReader}
+  def readFirstLine(file: File): IO[String] =
+    IO{println("Obtaining resource");new BufferedReader(new FileReader(file))}.bracket{ br =>
+      println("In USAGE action of bracked")
+      //throw new Error("Non fatal")
+      IO(br.readLine())
+    } { br =>
+      println("In RELEASE action of bracked")
+      IO(br.close())
+    }
+  //readFirstLine(new File("thisfiledoesnotexist")).unsafeRunSync()
+  readFirstLine(new File("README.md")).unsafeRunSync()
 
   // Conversions
 
@@ -165,7 +176,15 @@ object Main extends App {
 
   ioFromFuture.unsafeRunSync()
 
+  import cats.effect.Timer
+  def retryWithBackoff[A](ioa: IO[A], initialDelay: FiniteDuration, maxRetries: Int)(implicit timer: Timer[IO]): IO[A] = {
+    if(maxRetries <= 0) IO.raiseError[A](new Throwable("Max number of tries reached"))
+    else ioa.attempt.flatMap { 
+      case Right(a) => IO.pure(a)
+      case Left(err) => IO.sleep(initialDelay) *> retryWithBackoff(ioa, initialDelay * 2, maxRetries - 1)
+    }
+  }
 
-  
+
 
 }

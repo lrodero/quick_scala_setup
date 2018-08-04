@@ -11,6 +11,7 @@ scalacOptions ++= Seq(
   "-deprecation",
   "-unchecked",
   "-language:postfixOps",
-  "-language:higherKinds")
+  "-language:higherKinds",
+  "-Ypartial-unification")
 
 
