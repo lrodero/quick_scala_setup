@@ -15,8 +15,7 @@ trait ToByteArray[A] {
 }
 
 trait FromByteArray[A] {
-  val sizeInBytes: Int
-  implicit def fromByteArray(ba: ByteArray): Either[Throwable, A]
+  def readDataInputStream(dis: DataInputStream): Either[Throwable, A]
 }
 
 def read[A: FromByteArray]: IO[A]
@@ -26,9 +25,5 @@ def write[A: ToByteArray](a: A): IO[Unit]
 
 val readLine: IO[String] = ep.readLine
 def writeLine(s: String): IO[Unit] = ep.writeLine(s)
-
-
-
-
 
 ```
