@@ -172,16 +172,6 @@ object Endpoint {
       new WriteEndpoint(os)
     }
 
-  def openToRead(file: File): IO[ReadEndpoint] = IO {
-      val is = new BufferedInputStream(new FileInputStream(file))
-      new ReadEndpoint(is)
-    }
-
-  def openToWrite(file: File): IO[WriteEndpoint] = IO {
-      val os = new BufferedOutputStream(new FileOutputStream(file))
-      new WriteEndpoint(os)
-    }
-
   def copy(origin: ReadEndpoint, destination: WriteEndpoint): IO[Long] =
     copyInBatchesOf(origin, destination, 1024)
 
@@ -205,10 +195,6 @@ object Endpoint {
 
     copy(origin, destination, 0L)
   }
-
-  def copyFiles(origin: File, destination: File): IO[Long] = ???
-
-
 }
 
 object Main extends App {
