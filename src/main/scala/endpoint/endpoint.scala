@@ -119,6 +119,11 @@ abstract sealed class Closeable {
   def closeWithErr[A](err: Throwable): IO[A] = close() *> IO.raiseError[A](err)
 }
 
+
+/** Wraps a [[java.io.OutputStream]] so write operations are [[cats.effect.IO]]
+ *  instances. If some error is detected in a write operation, the stream is
+ *  closed automatically.
+ */
 final class WriteEndpoint(output: OutputStream) extends Closeable {
 
   override val closeable = output
@@ -139,6 +144,10 @@ final class WriteEndpoint(output: OutputStream) extends Closeable {
     }.handleErrorWith(closeWithErr[Unit](_))
 }
 
+/** Wraps a [[java.io.InputStream]] so read operations are [[cats.effect.IO]]
+ *  instances. If some error is detected in a read operation, the stream is
+ *  closed automatically.
+ */
 final class ReadEndpoint(input: InputStream) extends Closeable {
 
   override val closeable = input
@@ -161,26 +170,6 @@ final class ReadEndpoint(input: InputStream) extends Closeable {
 }
 
 object Endpoint {
-
-  def openToRead(file: String): IO[ReadEndpoint] = IO {
-      val is = new BufferedInputStream(new FileInputStream(file))
-      new ReadEndpoint(is)
-    }
-
-  def openToWrite(file: String): IO[WriteEndpoint] = IO {
-      val os = new BufferedOutputStream(new FileOutputStream(file))
-      new WriteEndpoint(os)
-    }
-
-  def openToRead(file: File): IO[ReadEndpoint] = IO {
-      val is = new BufferedInputStream(new FileInputStream(file))
-      new ReadEndpoint(is)
-    }
-
-  def openToWrite(file: File): IO[WriteEndpoint] = IO {
-      val os = new BufferedOutputStream(new FileOutputStream(file))
-      new WriteEndpoint(os)
-    }
 
   def copy(origin: ReadEndpoint, destination: WriteEndpoint): IO[Long] =
     copyInBatchesOf(origin, destination, 1024)
@@ -206,24 +195,73 @@ object Endpoint {
     copy(origin, destination, 0L)
   }
 
-  def copyFiles(origin: File, destination: File): IO[Long] = ???
+  // TODO: Move to its own package endpoint.file??
+  object File {
 
+    def openToRead(file: File): IO[ReadEndpoint] = IO {
+      val is = new BufferedInputStream(new FileInputStream(file))
+      new ReadEndpoint(is)
+    }
+
+    def openToWrite(file: File): IO[WriteEndpoint] = IO {
+      val os = new BufferedOutputStream(new FileOutputStream(file))
+      new WriteEndpoint(os)
+    }
+
+    def copy(origin: File, destination: File): IO[Long] = (openToRead(origin), openToWrite(destination))
+      .tupled
+      .bracket{ case (in, out) => 
+        Endpoint.copy(in, out)
+      }{ case (in, out) =>
+        (in.close(), out.close()).tupled *> IO.unit
+      }
+
+    // TODO: Implement wrappers for all methods of
+    // https://docs.oracle.com/javase/8/docs/api/java/io/File.html#toPath()
+    implicit class FileOpsToIO(file: File) {
+      def delete: IO[Boolean] = IO {
+        file.delete()
+      }
+
+      def deleteIfExists: IO[Boolean] = IO {
+        java.nio.file.Files.deleteIfExists(file.toPath)
+      }
+
+      def exists: IO[Boolean] = IO {
+        file.exists()
+      }
+
+      def isDirectory: IO[Boolean] = IO {
+        file.isDirectory
+      }
+
+      def list: IO[List[File]] = IO {
+        file.listFiles.toList
+      }
+
+      def renameTo(newFile: File): IO[Boolean] = IO {
+        file.renameTo(newFile)
+      }
+    }
+
+  }
 
 }
 
+// TODO:
+//  - Make copy cancelable
+//  - TCP
+//  - Stream data when read (Monix observable?), write data from stream
+
 object Main extends App {
 
-  val origin = "origin.txt"
-  val destination = "destination.txt"
+  val origin = new File("origin.txt")
+  val destination = new File("destination.txt")
 
-
-  val program = (Endpoint.openToRead(origin), Endpoint.openToWrite(destination))
-    .tupled
-    .bracket{ case (in, out) => 
-      Endpoint.copy(in, out).flatMap{copied => IO(println(s"Copied $copied bytes"))}
-    }{ case (in, out) =>
-      (in.close(), out.close()).tupled *> IO.unit
-    }
+  val program: IO[Unit] = for {
+    copied <- Endpoint.File.copy(origin, destination)
+    _ <- IO { println(s"Copied $copied bytes") }
+  } yield ()
 
   program.unsafeRunSync()
 
