@@ -7,6 +7,11 @@ import cats.implicits._
 
 import java.io._
 
+/** Set of operations that create [[endpoint.ReadEndpoint]] and 
+ *  [[endpoint.WriteEndpoint]] instances to access files. They
+ *  are created by wrapping instances of java streams that operate
+ *  on those files.
+ */
 object FileOps {
 
   /**Creates an [[endpoint.ReadEndpoint]] instance by opening the
@@ -57,8 +62,8 @@ object FileOps {
     File.createTempFile(prefix, suffix)
   }
 
-  def listRoots: IO[List[File]] = IO {
-    File.listRoots().toList
+  def listRoots: IO[Option[List[File]]] = IO {
+    Option(File.listRoots()).map(_.toList)
   }
 
 
@@ -68,166 +73,166 @@ object FileOps {
   /** Wrappers for all non-static methods of
    *  https://docs.oracle.com/javase/8/docs/api/java/io/File.html
    */
-  implicit class FileOpsToIO(file: File) {
+  implicit class Ops(file: File) {
 
-    def canExecute: IO[Boolean] = IO {
+    def canExecuteIO: IO[Boolean] = IO {
       file.canExecute()
     }
 
-    def canRead: IO[Boolean] = IO {
+    def canReadIO: IO[Boolean] = IO {
       file.canRead()
     }
 
-    def canWrite: IO[Boolean] = IO {
+    def canWriteIO: IO[Boolean] = IO {
       file.canWrite()
     }
 
-    def compareTo(pathName: File): IO[Int] = IO {
+    def compareToIO(pathName: File): IO[Int] = IO {
       file.compareTo(pathName)
     }
 
-    def createNewFile: IO[Boolean] = IO {
+    def createNewFileIO: IO[Boolean] = IO {
       file.createNewFile()
     }
 
-    def delete: IO[Boolean] = IO {
+    def deleteIO: IO[Boolean] = IO {
       file.delete()
     }
 
-    def deleteOnExit: IO[Unit] = IO {
+    def deleteOnExitIO: IO[Unit] = IO {
       file.deleteOnExit()
     }
 
     // This in fact comes from java.nio.file, but it's quite useful
-    def deleteIfExists: IO[Boolean] = IO {
+    def deleteIfExistsIO: IO[Boolean] = IO {
       java.nio.file.Files.deleteIfExists(file.toPath)
     }
 
-    def exists: IO[Boolean] = IO {
+    def existsIO: IO[Boolean] = IO {
       file.exists()
     }
  
-    def getAbsoluteFile: IO[File] = IO {
+    def getAbsoluteFileIO: IO[File] = IO {
       file.getAbsoluteFile()
     }
 
-    def getAbsolutePath: IO[String] = IO {
+    def getAbsolutePathIO: IO[String] = IO {
       file.getAbsolutePath()
     }
 
-    def getCanonicalFile: IO[File] = IO {
+    def getCanonicalFileIO: IO[File] = IO {
       file.getCanonicalFile()
     }
 
-    def getCanonicalPath: IO[String] = IO {
+    def getCanonicalPathIO: IO[String] = IO {
       file.getCanonicalPath()
     }
 
-    def getFreeSpace: IO[Long] = IO {
+    def getFreeSpaceIO: IO[Long] = IO {
       file.getFreeSpace()
     }
 
-    def getName: IO[String] = IO {
+    def getNameIO: IO[String] = IO {
       file.getName()
     }
 
-    def getParent: IO[String] = IO {
+    def getParentIO: IO[String] = IO {
       file.getParent()
     }
 
-    def getParentFile: IO[File] = IO {
+    def getParentFileIO: IO[File] = IO {
       file.getParentFile()
     }
 
-    def getPath: IO[String] = IO {
+    def getPathIO: IO[String] = IO {
       file.getPath()
     }
 
-    def getTotalSpace: IO[Long] = IO {
+    def getTotalSpaceIO: IO[Long] = IO {
       file.getTotalSpace()
     }
 
-    def getUsableSpace: IO[Long] = IO {
+    def getUsableSpaceIO: IO[Long] = IO {
       file.getUsableSpace()
     }
 
-    def isAbsolute: IO[Boolean] = IO {
+    def isAbsoluteIO: IO[Boolean] = IO {
       file.isAbsolute()
     }
 
-    def isDirectory: IO[Boolean] = IO {
+    def isDirectoryIO: IO[Boolean] = IO {
       file.isDirectory()
     }
 
-    def isFile: IO[Boolean] = IO {
+    def isFileIO: IO[Boolean] = IO {
       file.isFile()
     }
 
-    def isHidden: IO[Boolean] = IO {
+    def isHiddenIO: IO[Boolean] = IO {
       file.isHidden()
     }
 
-    def lastModified: IO[Long] = IO {
+    def lastModifiedIO: IO[Long] = IO {
       file.lastModified()
     }
 
-    def length: IO[Long] = IO {
+    def lengthIO: IO[Long] = IO {
       file.length()
     }
 
-    def list: IO[List[File]] = IO {
+    def listIO: IO[List[File]] = IO {
       file.listFiles.toList
     }
 
-    def listFiles(filter: FileFilter): IO[List[File]] = IO {
+    def listFilesIO(filter: FileFilter): IO[List[File]] = IO {
       file.listFiles(filter).toList
     }
 
-    def listFiles(filter: FilenameFilter): IO[List[File]] = IO {
+    def listFilesIO(filter: FilenameFilter): IO[List[File]] = IO {
       file.listFiles(filter).toList
     }
 
-    def mkdir: IO[Boolean] = IO {
+    def mkdirIO: IO[Boolean] = IO {
       file.mkdir()
     }
 
-    def mkdirs: IO[Boolean] = IO {
+    def mkdirsIO: IO[Boolean] = IO {
       file.mkdirs()
     }
 
-    def renameTo(dest: File): IO[Boolean] = IO {
+    def renameToIO(dest: File): IO[Boolean] = IO {
       file.renameTo(dest)
     }
 
-    def setExecutable(executable: Boolean): IO[Boolean] = IO {
+    def setExecutableIO(executable: Boolean): IO[Boolean] = IO {
       file.setExecutable(executable)
     }
 
-    def setExecutable(executable: Boolean, ownerOnly: Boolean): IO[Boolean] = IO {
+    def setExecutableIO(executable: Boolean, ownerOnly: Boolean): IO[Boolean] = IO {
       file.setExecutable(executable, ownerOnly)
     }
 
-    def setLastModified(time: Long): IO[Boolean] = IO {
+    def setLastModifiedIO(time: Long): IO[Boolean] = IO {
       file.setLastModified(time)
     }
 
-    def setReadable(readable: Boolean): IO[Boolean] = IO {
+    def setReadableIO(readable: Boolean): IO[Boolean] = IO {
       file.setReadable(readable)
     }
 
-    def setReadable(readable: Boolean, ownerOnly: Boolean): IO[Boolean] = IO {
+    def setReadableIO(readable: Boolean, ownerOnly: Boolean): IO[Boolean] = IO {
       file.setReadable(readable, ownerOnly)
     }
 
-    def setReadOnly: IO[Boolean] = IO {
+    def setReadOnlyIO: IO[Boolean] = IO {
       file.setReadOnly()
     }
 
-    def setWritable(writable: Boolean): IO[Boolean] = IO {
+    def setWritableIO(writable: Boolean): IO[Boolean] = IO {
       file.setWritable(writable)
     }
 
-    def setWritable(writable: Boolean, ownerOnly: Boolean): IO[Boolean] = IO {
+    def setWritableIO(writable: Boolean, ownerOnly: Boolean): IO[Boolean] = IO {
       file.setWritable(writable, ownerOnly)
     }
 

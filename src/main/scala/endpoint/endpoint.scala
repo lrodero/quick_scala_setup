@@ -1,114 +1,17 @@
 package endpoint
-
 import cats.effect.IO
 import cats.effect.IO._
 import cats.implicits._
 
+import endpoint.encoding.Encoding
+
 import java.io._
 
 /**
- * Wraps with IO instances read/writing actions on the provided streams. No action is taken
- * in case of error, e.g. the stream is not closed. Is the caller who better how to behave
- * when errors are triggered.
+ * Wraps <code>close()</code> operation of [[java.io.Closeable]] inside an
+ * IO instance. Also it adds the [[closeWithErr]] function that allows to
+ * add an exception to that enclosing IO.
  */
-trait Encoding[A] {
-  def read(dis: DataInputStream): IO[A]
-  def write(a: A, dos: DataOutputStream): IO[Unit]
-}
-
-object Encoding {
-
-  object instances {
-
-    object JAVA_ENCODING {
-
-      implicit object EncInt extends Encoding[Int] {
-        def read(dis: DataInputStream): IO[Int] = IO {
-          dis.readInt()
-        }
-        def write(i: Int, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeInt(i)
-        }
-      }
-
-      implicit object EncShort extends Encoding[Short] {
-        def read(dis: DataInputStream): IO[Short] = IO {
-          dis.readShort()
-        }
-        def write(s: Short, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeShort(s)
-        }
-      }
-
-      implicit object EncLong extends Encoding[Long] {
-        def read(dis: DataInputStream): IO[Long] = IO {
-          dis.readLong()
-        }
-        def write(l: Long, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeLong(l)
-        }
-      }
-
-      implicit object EncDouble extends Encoding[Double] {
-        def read(dis: DataInputStream): IO[Double] = IO {
-          dis.readDouble()
-        }
-        def write(d: Double, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeDouble(d)
-        }
-      }
-
-      implicit object EncFloat extends Encoding[Float] {
-        def read(dis: DataInputStream): IO[Float] = IO {
-          dis.readFloat()
-        }
-        def write(f: Float, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeFloat(f)
-        }
-      }
-
-      implicit object EncByte extends Encoding[Byte] {
-        def read(dis: DataInputStream): IO[Byte] = IO {
-          dis.readByte()
-        }
-        def write(b: Byte, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeByte(b)
-        }
-      }
-
-      implicit object EncBoolean extends Encoding[Boolean] {
-        def read(dis: DataInputStream): IO[Boolean] = IO {
-          dis.readBoolean()
-        }
-        def write(b: Boolean, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeBoolean(b)
-        }
-      }
-
-      implicit object EncChar extends Encoding[Char] {
-        def read(dis: DataInputStream): IO[Char] = IO {
-          dis.readChar()
-        }
-        def write(c: Char, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeChar(c)
-        }
-      }
-
-      implicit object EncString extends Encoding[String] {
-        def read(dis: DataInputStream): IO[String] = IO {
-          dis.readUTF()
-        }
-        def write(s: String, dos: DataOutputStream): IO[Unit] = IO {
-          dos.writeUTF(s)
-        }
-      }
-
-    }
-
-  }
-
-}
-
 abstract sealed class Closeable {
   val closeable: java.io.Closeable
 
@@ -159,18 +62,42 @@ final class ReadEndpoint(input: InputStream) extends Closeable {
 
   override val closeable = dis
 
+  def available: IO[Int] = IO {
+    dis.available()
+  }.handleErrorWith(closeWithErr[Int](_))
+
+  def mark(readLimit: Int): IO[Unit] = IO {
+    dis.mark(readLimit)
+  }.handleErrorWith(closeWithErr[Unit](_))
+
+  def markSupported: IO[Boolean] = IO {
+    dis.markSupported()
+  }.handleErrorWith(closeWithErr[Boolean](_))
+
   def read[A: Encoding]: IO[A] =
     implicitly[Encoding[A]]
       .read(dis)
       .handleErrorWith(closeWithErr[A](_))
 
   def readByteArray(arr: Array[Byte]): IO[Int] = IO {
-    input.read(arr)
+    dis.read(arr)
   }.handleErrorWith(closeWithErr[Int](_))
 
   def readByteArray(arr: Array[Byte], offset: Int, length: Int): IO[Int] = IO {
-    input.read(arr, offset, length)
+    dis.read(arr, offset, length)
   }.handleErrorWith(closeWithErr[Int](_))
+
+  def reset: IO[Unit] = IO {
+    dis.reset()
+  }.handleErrorWith(closeWithErr[Unit](_))
+
+  def skipBytes(n: Int): IO[Int] = IO {
+    dis.skipBytes(n)
+  }.handleErrorWith(closeWithErr[Int](_))
+
+  def skip(n: Long): IO[Long] = IO {
+    dis.skip(n)
+  }.handleErrorWith(closeWithErr[Long](_))
 
 }
 
@@ -278,42 +205,71 @@ object Endpoint {
   def copyInBatchesOf(origin: ReadEndpoint, destination: WriteEndpoint, batchSize: Int): IO[Long] = {
 
     // Reads and writes in 'batches', i.e. arrays of bytes. We reuse always the same array.
-    val batch = new Array[Byte](batchSize)
-
-    def copyBatch(origin: ReadEndpoint, destination: WriteEndpoint, arr: Array[Byte]): IO[Int] = for {
-      amount <- origin.readByteArray(arr)
-      _ <- if(amount > -1) destination.writeByteArray(arr, 0, amount)
-           else IO.unit // End of read stream reached, nothing to write
-    } yield amount
-
-    def copy(origin: ReadEndpoint, destination: WriteEndpoint, acc: Long): IO[Long] = for {
+    def transferLoop(origin: ReadEndpoint, destination: WriteEndpoint, arr: Array[Byte], acc: Long): IO[Long] = for {
       _ <- IO.cancelBoundary
-      amount <- copyBatch(origin, destination, batch)
-      total <- if(amount > -1) copy(origin, destination, acc + amount)
+      amount <- transfer(origin, destination, arr)
+      total <- if(amount > -1) transferLoop(origin, destination, arr, acc + amount)
                else IO.pure(acc)
     } yield total
 
-    copy(origin, destination, 0L)
+    for {
+      arr <- IO.pure(new Array[Byte](batchSize))
+      acc <- transferLoop(origin, destination, arr, 0L)
+    } yield acc
   }
 
+  /**Copy <code>length</code> bytes from <code>origin</code> to <code>destination</code> by calling
+   * to [[copyInBatchesOf]] with batch size [[DEFAULT_BATCH_SIZE]].
+   */
+  def copy(origin: ReadEndpoint, destination: WriteEndpoint, length: Long): IO[Long] =
+    copyInBatchesOf(origin, destination, length, DEFAULT_BATCH_SIZE)
+
+  /**Copy contents of <code>origin</code> to <code>destination</code>, until <code>length</code> bytes
+   * have been copied or the end of the <code>origin</code> [[java.io.Inputstream]] is reached or
+   * the IO instance returned is cancelled. Cancellation will <em>NOT</em> close both <code>origin</code>
+   * and <code> destination</code>. Recall that:
+   * <ul>
+   *   <li> Cancelling a copy IO operation does not set the origin or destination into their
+   *        original state. So for example when writing to a file, data written before the
+   *        cancellation will be available there.</li>
+   *   <li> If some error is caught in one of the endpoints (<em>e.g.</em> an <code>IOException</code>
+   *        is caught) only the endpoint affected is closed.</li>
+   * </ul>
+   */
+  def copyInBatchesOf(origin: ReadEndpoint, destination: WriteEndpoint, length: Long, batchSize: Int): IO[Long] = {
+
+    def transferLoop(origin: ReadEndpoint, destination: WriteEndpoint, arr: Array[Byte], acc: Long): IO[Long] =
+      if(acc >= length)
+        IO.pure(acc)
+      else
+        for {
+          _ <- IO.cancelBoundary
+          remaining = acc - length
+          amount <- if(remaining >= batchSize) transfer(origin, destination, arr)
+                    else transfer(origin, destination, arr, 0, remaining.toInt)
+          total <- if(amount > -1) transferLoop(origin, destination, arr, acc + amount)
+                   else IO.pure(acc)
+          } yield total
+
+   for {
+     arr <- IO.pure(new Array[Byte](batchSize))
+     acc <- transferLoop(origin, destination, arr, 0L)
+   } yield acc
+  }
+
+  private def transfer(origin: ReadEndpoint, destination: WriteEndpoint, arr: Array[Byte]): IO[Int] = 
+    transfer(origin, destination, arr, 0, arr.size)
+
+  private def transfer(origin: ReadEndpoint, destination: WriteEndpoint, arr: Array[Byte], offset: Int, length: Int): IO[Int] = for {
+    amount <- origin.readByteArray(arr, offset, length)
+    _ <- if(amount > -1) destination.writeByteArray(arr, offset, amount)
+         else IO.unit // End of read stream reached, nothing to write
+  } yield amount
 }
 
 // TODO:
-//  - TCP
+//  - TCP tests
 //  - Stream data when read (Monix observable?), write data from stream
+//  - The encoding JAVA_BINARY should be improved with shapeless for automatic derivation
+//    of Encoding instances for ADTs
 
-object Main extends App {
-
-  val origin = new File("origin.txt")
-  val destination = new File("destination.txt")
-
-  import scala.concurrent.ExecutionContext.Implicits.global
-  val program: IO[Unit] = for {
-    fiber <- endpoint.file.FileOps.copy(origin, destination).start
-    copied <- fiber.join // Will never get there is the fiber is cancelled! In this example is the raiseError who 'breaks' the IO
-    _ <- IO { println(s"Copied $copied bytes") }
-  } yield ()
-
-  program.unsafeRunSync()
-
-}
