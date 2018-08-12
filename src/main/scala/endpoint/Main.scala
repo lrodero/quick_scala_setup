@@ -36,27 +36,27 @@ object MainTCP extends IOApp {
                        }
     } yield ()
 
-    for {
-      serverSocket <- ServerSocketIO.serverSocket(Option(port), None, None)
-      _            <- acceptNewConnections(serverSocket).guarantee{IO{println("Closing server socket")} *> IO{serverSocket.close()}.handleErrorWith(_ => IO.unit)}
-    } yield()
+    ServerSocketIO.serverSocket(Option(port), None, None) >>= { serverSocket =>
+      acceptNewConnections(serverSocket)
+        .guarantee{
+          IO{println("Closing server socket")} *> IO{serverSocket.close()}.handleErrorWith(_ => IO.unit)
+        }
+    }
 
   }
 
-  // Just and 'echo' server. It will quit when it gets an empty line
+  // Just and 'echo' server. It will quit when it gets an empty line. If it gets 'CLOSE' then it will stop the whole server.
   def attendNewClient(clientSocket: Socket, stopServerFlag: MVar[IO, Unit]): IO[Unit] = {
-    
-    val readerIO = IO{ println(s"Creating reader for socket, is connected to remote port ${clientSocket.getPort}") } *> SocketIO.getReader(clientSocket)
-    val writerIO = IO{ println(s"Creating writer for socket, is connected to remote port ${clientSocket.getPort}") } *> SocketIO.getWriter(clientSocket)
 
-    def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = for {
-      line <- reader.readLineIO
-      _ <- if(line == "CLOSE") stopServerFlag.put(())
-           else if(line == "") IO.unit
-           else writer.writeIO(line) *> writer.newLineIO *> writer.flushIO *> loop(reader, writer)
-    } yield ()
+    def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = 
+      reader.readLineIO >>= { line => line match {
+        case "CLOSE" => stopServerFlag.put(())
+        case ""      => IO.unit
+        case _       => writer.writeIO(line) *> writer.newLineIO *> writer.flushIO *> loop(reader, writer)
+      }}
+        
 
-    (readerIO, writerIO)
+    (SocketIO.getReader(clientSocket), SocketIO.getWriter(clientSocket))
       .tupled
       .bracketCase {
         case (reader, writer) => loop(reader, writer)
