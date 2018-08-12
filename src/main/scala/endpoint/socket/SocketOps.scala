@@ -2,7 +2,7 @@ package endpoint.socket
 
 import cats.effect.IO
 
-import endpoint.{ReadEndpoint, WriteEndpoint}
+import endpoint._
 
 import java.io._
 import java.net._
@@ -14,7 +14,7 @@ import javax.net.ssl.{SSLServerSocket, SSLServerSocketFactory}
  *  are created by wrapping instances of java streams that operate
  *  on those sockets.
  */
-object ServerSocketOps {
+object ServerSocketIO {
 
   def serverSocket(portO: Option[Int], backlogO: Option[Int], addrO: Option[InetAddress]): IO[ServerSocket] =
     (portO, backlogO, addrO) match {
@@ -38,7 +38,7 @@ object ServerSocketOps {
     ServerSocket.setSocketFactory(fac)
   }
 
-  implicit class Ops(socket: ServerSocket) {
+  implicit class ServerSocketIOOps(socket: ServerSocket) {
 
     def acceptIO: IO[Socket] = IO {
       socket.accept()
@@ -116,7 +116,7 @@ object ServerSocketOps {
 // TODO: SSL sockets: https://docs.oracle.com/javase/8/docs/api/javax/net/ssl/SSLSocket.html and SSLServerSockets
 // TODO: See what is all that of SocketChannel
 
-object SocketOps {
+object SocketIO {
 
   def socket: IO[Socket] = IO {
     new Socket()
@@ -134,17 +134,23 @@ object SocketOps {
     Socket.setSocketImplFactory(fac)
   }
 
-  def getReadEndpoint(socket: Socket): IO[ReadEndpoint] = IO {
-      val is = new BufferedInputStream(socket.getInputStream())
-      new ReadEndpoint(is)
+  def getBufferedInputStream(socket: Socket): IO[BufferedInputStream] = IO {
+    new BufferedInputStream(socket.getInputStream())
   }
   
-  def getWriteEndpoint(socket: Socket): IO[WriteEndpoint] = IO {
-      val os = new BufferedOutputStream(socket.getOutputStream())
-      new WriteEndpoint(os)
+  def getBufferedOutputStream(socket: Socket): IO[BufferedOutputStream] = IO {
+    new BufferedOutputStream(socket.getOutputStream())
+  }
+
+  def getReader(socket: Socket): IO[BufferedReader] = IO {
+    new BufferedReader(new InputStreamReader(socket.getInputStream()))
   }
   
-  implicit class Ops(socket: Socket) {
+  def getWriter(socket: Socket): IO[BufferedWriter] = IO {
+    new BufferedWriter(new PrintWriter(socket.getOutputStream()))
+  }
+
+  implicit class SocketIOOps(socket: Socket) {
 
     def bindIO(bindpoint: SocketAddress): IO[Unit] = IO {
       socket.bind(bindpoint)

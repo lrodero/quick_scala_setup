@@ -1,6 +1,6 @@
 package endpoint.file
 
-import endpoint._
+import endpoint.Endpoint._
 
 import cats.effect.IO
 import cats.implicits._
@@ -12,26 +12,22 @@ import java.io._
  *  are created by wrapping instances of java streams that operate
  *  on those files.
  */
-object FileOps {
+object FileIO {
 
-  /**Creates an [[endpoint.ReadEndpoint]] instance by opening the
-   * file passed as parameter. Recall that operations that throw
-   * an error will automatically trigger the closing of the embedded
-   * stream.
-   */
-  def openToRead(file: File): IO[ReadEndpoint] = IO {
-    val is = new BufferedInputStream(new FileInputStream(file))
-    new ReadEndpoint(is)
+  def openToReadBinIO(file: File): IO[BufferedInputStream] = IO {
+    new BufferedInputStream(new FileInputStream(file))
   }
 
-  /**Creates an [[endpoint.WriteEndpoint]] instance by opening the
-   * file passed as parameter. Recall that operations that throw
-   * an error will automatically trigger the closing of the embedded
-   * stream.
-   */
-  def openToWrite(file: File): IO[WriteEndpoint] = IO {
-    val os = new BufferedOutputStream(new FileOutputStream(file))
-    new WriteEndpoint(os)
+  def openToReadTxtIO(file: File): IO[FileReader] = IO {
+    new FileReader(file)
+  }
+  
+  def openToWriteBinIO(file: File): IO[BufferedOutputStream] = IO {
+    new BufferedOutputStream(new FileOutputStream(file))
+  }
+
+  def openToWriteTxtIO(file: File): IO[FileWriter] = IO {
+    new FileWriter(file)
   }
 
   /**Copies contents from origin to destination, returning the amount
@@ -40,12 +36,12 @@ object FileOps {
    * cancellation interrupts the copying action, but it does not rollback
    * it.
    */
-  def copy(origin: File, destination: File): IO[Long] = (openToRead(origin), openToWrite(destination))
+  def copy(origin: File, destination: File): IO[Long] = (openToReadBinIO(origin), openToWriteBinIO(destination))
     .tupled
     .bracket{ case (in, out) => 
       Endpoint.copy(in, out)
     }{ case (in, out) =>
-      (in.close, out.close).tupled *> IO.unit
+      (in.closeIO, out.closeIO).tupled *> IO.unit
     }
 
   // TODO
@@ -73,7 +69,7 @@ object FileOps {
   /** Wrappers for all non-static methods of
    *  https://docs.oracle.com/javase/8/docs/api/java/io/File.html
    */
-  implicit class Ops(file: File) {
+  implicit class FileIOOps(file: File) {
 
     def canExecuteIO: IO[Boolean] = IO {
       file.canExecute()
