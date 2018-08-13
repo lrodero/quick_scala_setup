@@ -36,47 +36,58 @@ object MainTCP extends IOApp {
                        }
     } yield ()
 
-    ServerSocketIO.serverSocket(Option(port), None, None) >>= { serverSocket =>
-      acceptNewConnections(serverSocket)
-        .guarantee{
-          IO{println("Closing server socket")} *> IO{serverSocket.close()}.handleErrorWith(_ => IO.unit)
-        }
-    }
+    def close(serverSocket: ServerSocket): IO[Unit] = IO{serverSocket.close()}.handleErrorWith(_ => IO.unit)
+
+    ServerSocketIO.serverSocket(Option(port), None, None)
+      .bracketCase {
+        serverSocket => acceptNewConnections(serverSocket).guarantee{ IO{ println("Closing server socket") } *> close(serverSocket) }
+      } {
+        case (_, Completed)  => IO{println("Finished server socket normally")}
+        case (_, Canceled)   => IO{println("Finished server socket because cancellation")}
+        case (_, Error(err)) => IO{println(s"Finished server socket due to error: '${err.getMessage}'")}
+      }
 
   }
 
   // Just and 'echo' server. It will quit when it gets an empty line. If it gets 'CLOSE' then it will stop the whole server.
   def attendNewClient(clientSocket: Socket, stopServerFlag: MVar[IO, Unit]): IO[Unit] = {
 
-    def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = 
-      reader.readLineIO >>= { line => line match {
-        case "CLOSE" => stopServerFlag.put(())
-        case ""      => IO.unit
-        case _       => writer.writeIO(line) *> writer.newLineIO *> writer.flushIO *> loop(reader, writer)
-      }}
-        
+    def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = for {
+      line <- reader.readLineIO
+      _    <- line match {
+                case "CLOSE" => stopServerFlag.put(())
+                case ""      => IO.unit
+                case _       => writer.writeIO(line) *> writer.newLineIO *> writer.flushIO *> loop(reader, writer)
+              }
+    } yield ()
+
+    def close(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = 
+      (reader.closeIO, writer.closeIO, clientSocket.closeIO).tupled.map(_ => ()).handleErrorWith(_ => IO.unit)
 
     (SocketIO.getReader(clientSocket), SocketIO.getWriter(clientSocket))
       .tupled
       .bracketCase {
-        case (reader, writer) => loop(reader, writer)
+        case (reader, writer) => loop(reader, writer).guarantee{ IO{ println("Closing client socket") } *> close(reader, writer) }
       } { 
-        case ((reader, writer), Completed) =>
-          IO {println("Closing client socket normally")} *> (reader.closeIO, writer.closeIO, clientSocket.closeIO).tupled.map(_ => ())
-        case ((reader, writer), Canceled) =>
-          IO {println(s"Closing client socket because cancellation")} *> (reader.closeIO, writer.closeIO, clientSocket.closeIO).tupled.map(_ => ())
-        case ((reader, writer), Error(err)) =>
-          IO {println(s"Closing client socket abnormally, ${err.getMessage}")} *> (reader.closeIO, writer.closeIO, clientSocket.closeIO).tupled.map(_ => ())
+        case (_, Completed)  => IO {println("Finished service to client normally")}
+        case (_, Canceled)   => IO {println(s"Finished service to client because cancellation")}
+        case (_, Error(err)) => IO {println(s"Finished service to client due to error: '${err.getMessage}'")}
       }  
   } 
 
-  override def run(args: List[String]): IO[ExitCode] = for {
+  val server: IO[ExitCode] = for {
     stopServerFlag <- MVar[IO].empty[Unit]
     serverFiber    <- serve(5001, stopServerFlag).start
     _              <- stopServerFlag.read
     _              <- serverFiber.cancel
   } yield ExitCode.Success
 
+  override def run(args: List[String]): IO[ExitCode] =
+    server.guaranteeCase {
+      case Error(err) => IO{ println(s"Server was stopped due to an error: ${err.getMessage}") }
+      case Canceled   => IO{ println("Server execution was cancelled") }
+      case Completed  => IO{ println("Server was successfully run") }
+    }
 }
 
 object MainFile extends App {
