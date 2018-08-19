@@ -91,7 +91,7 @@ object StoppableServer2 extends IOApp {
       .bracket {
         serverSocket => server(serverSocket) *> IO.pure(ExitCode.Success)
       } {
-        serverSocket => close(serverSocket)  *> IO{ println("Finished server") }
+        serverSocket => close(serverSocket)  *> IO{ println("Server finished") }
       }
   }
 }

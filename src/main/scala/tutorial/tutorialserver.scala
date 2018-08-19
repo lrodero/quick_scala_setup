@@ -58,7 +58,7 @@ object Server extends IOApp {
       .bracket{
         serverSocket => serve(serverSocket) *> IO.pure(ExitCode.Success)
       } {
-        serverSocket => close(serverSocket) *> IO{ println("Finished server") }
+        serverSocket => close(serverSocket) *> IO{ println("Server finished") }
       }
   }
 }
