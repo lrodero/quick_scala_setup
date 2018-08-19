@@ -7,7 +7,7 @@ import cats.implicits._
 import java.io._
 import java.net._
 
-object StoppableServer extends IOApp {
+object StoppableServer2 extends IOApp {
 
   def echoProtocol(clientSocket: Socket, stopFlag: MVar[IO, Unit]): IO[Unit] = {
   
@@ -19,13 +19,21 @@ object StoppableServer extends IOApp {
   
     def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] =
       for {
-        _    <- IO.cancelBoundary
-        line <- IO{ reader.readLine() }
-        _    <- line match {
-                  case "STOP" => stopFlag.put(())
-                  case ""     => IO.unit // Empty line, we are done
-                  case _      => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
-                }
+        _     <- IO.cancelBoundary
+        lineE <- IO{ reader.readLine() }.attempt
+        _     <- lineE match {
+                   case Right(line) => line match {
+                     case "STOP" => stopFlag.put(())
+                     case ""     => IO.unit // Empty line, we are done
+                     case _      => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
+                   }
+                   case Left(e) =>
+                     for { // readLine() failed, stopFlag will tell us whether this is a graceful shutdown
+                       isEmpty <- stopFlag.isEmpty
+                       _       <- if(!isEmpty) IO.unit  // stopFlag is set, nothing to do
+                                  else IO.raiseError(e) // stopFlag not set, must raise error
+                     } yield ()
+                 }
       } yield ()
   
     (IO{ new BufferedReader(new InputStreamReader(clientSocket.getInputStream())) },
@@ -49,22 +57,24 @@ object StoppableServer extends IOApp {
       _       <- socketE match {
         case Right(socket) =>
           for { // accept() succeeded, we attend the client in its own Fiber
-            _ <- echoProtocol(socket, stopFlag)
-                   .guarantee(close(socket))   // We close the server whatever happens
-                   .start                      // Client attended by its own Fiber
-            _ <- serve(serverSocket, stopFlag) // Looping back to the beginning
+            fiber <- echoProtocol(socket, stopFlag)
+                       .guarantee(close(socket))     // We close the server whatever happens
+                       .start                        // Client attended by its own Fiber
+            _     <- (stopFlag.read *> fiber.cancel)
+                       .start                        // Another Fiber to cancel the client when stopFlag is set
+            _     <- serve(serverSocket, stopFlag)   // Looping back to the beginning
           } yield ()
         case Left(e) =>
           for { // accept() failed, stopFlag will tell us whether this is a graceful shutdown
             isEmpty <- stopFlag.isEmpty
-            _ <- if(!isEmpty) IO.unit // stopFlag is set, nothing to do
-            else IO.raiseError(e)     // stopFlag not set, must raise error
+            _       <- if(!isEmpty) IO.unit  // stopFlag is set, nothing to do
+                       else IO.raiseError(e) // stopFlag not set, must raise error
           } yield ()
       }
     } yield ()
   }
 
-  def server(serverSocket: ServerSocket): IO[ExitCode] =
+  def server(serverSocket: ServerSocket): IO[ExitCode] = 
     for {
       stopFlag    <- MVar[IO].empty[Unit]
       serverFiber <- serve(serverSocket, stopFlag).start

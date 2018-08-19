@@ -298,7 +298,7 @@ def echoProtocol(clientSocket: Socket): IO[Unit] = {
   def close(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = 
     (IO{reader.close()}, IO{writer.close()})
       .tupled                        // From (IO[Unit], IO[Unit]) to IO[(Unit, Unit)]
-      .map(_ => ())                  // From IO[(Unit, Unit)] IO[Unit]
+      .map(_ => ())                  // From IO[(Unit, Unit)] to IO[Unit]
       .handleErrorWith(_ => IO.unit) // Swallowing up any possible error
 
   def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = ???
@@ -342,14 +342,15 @@ as there is little to do in such cases.  But, of course, we still miss that `loo
 do the actual interactions with the client. It is not hard to code though:
 
 ```scala
-def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = for {
-  _    <- IO.cancelBoundary
-  line <- IO{ reader.readLine() }
-  _    <- line match {
-            case "" => IO.unit // Empty line, we are done
-            case _  => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
-          }
-} yield ()
+def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] =
+  for {
+    _    <- IO.cancelBoundary
+    line <- IO{ reader.readLine() }
+    _    <- line match {
+              case "" => IO.unit // Empty line, we are done
+              case _  => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
+            }
+  } yield ()
 ```
 
 The loop tries to read a line from the client, and if successful then it checks the line content. If
@@ -405,17 +406,18 @@ object Server extends IOApp {
     def close(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = 
       (IO{reader.close()}, IO{writer.close()})
         .tupled                        // From (IO[Unit], IO[Unit]) to IO[(Unit, Unit)]
-        .map(_ => ())                  // From IO[(Unit, Unit)] IO[Unit]
+        .map(_ => ())                  // From IO[(Unit, Unit)] to IO[Unit]
         .handleErrorWith(_ => IO.unit) // Swallowing up any possible error
   
-    def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = for {
-      _    <- IO.cancelBoundary
-      line <- IO{ reader.readLine() }
-      _    <- line match {
-                case "" => IO.unit // Empty line, we are done
-                case _  => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
-              }
-    } yield ()
+    def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] =
+      for {
+        _    <- IO.cancelBoundary
+        line <- IO{ reader.readLine() }
+        _    <- line match {
+                  case "" => IO.unit // Empty line, we are done
+                  case _  => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
+                }
+      } yield ()
   
     (IO{ new BufferedReader(new InputStreamReader(clientSocket.getInputStream())) },
      IO{ new BufferedWriter(new PrintWriter(clientSocket.getOutputStream())) })
@@ -446,7 +448,7 @@ object Server extends IOApp {
     def close(socket: ServerSocket): IO[Unit] =
       IO{ socket.close() }.handleErrorWith(_ => IO.unit)
   
-    IO{ new ServerSocket(5432) }
+    IO{ new ServerSocket(args.headOption.map(_.toInt).getOrElse(5432)) }
       .bracket{
         serverSocket => serve(serverSocket) *> IO.pure(ExitCode.Success)
       } {
@@ -462,7 +464,8 @@ As before you can run in for example from the `sbt` console just by typing
 > runMain tutorial.Server
 ```
 
-To test the server is properly running, you can connect to it using `telnet`. Here we connect, send
+That will start the server on port `5432`, you can set any other port by passing it as argument. To
+test the server is properly running, you can connect to it using `telnet`. Here we connect, send
 `hi` line to check we get the same line as reply, and then send and empty line to close the
 connection:
 
@@ -476,6 +479,9 @@ hi
 
 Connection closed by foreign host.
 ```
+
+You can connect several telnet sessions at the same time to verify that indeed our server can attend
+all of them simultaneously.
 
 Unfortunately this server is a bit too simplistic. What about halting? Well, that is something we
 have not addressed yet and it is when things can get a bit more complicated. We will deal with
@@ -493,30 +499,257 @@ First, we will use a flag to signal when the server shall quit. The server will 
 value, asynchronously blocking reads when empty and blocking writes when full_. So we will 'block'
 by reading our `MVar` instance. And who shall signal that the server must be stopped? In this
 example, we will assume that it will be the connected users who can request the server to halt by
-sendind a `CLOSE` message. Thus, the method attending clients (`echoProtocol`!) needs access to the
-flag.
+sendind a `STOP` message. Thus, the method attending clients (`echoProtocol`!) needs access to the
+flag. 
 
-Let's first define a new method that instantiates both the server and the flag, waits for the flag
-to be set and then cancels the server:
-
-```scala
-def server(serverSocket: ServerSocket): IO[ExitCode] = for {
-    stopFlag    <- MVar[IO].empty[Unit]
-    serverFiber <- serve(serverSocket, stopFlag).start // Server runs on its own Fiber
-    _           <- stopFlag.read                       // Blocked until 'stopServerFlag.put(())' is run
-    _           <- serverFiber.cancel                  // Stopping server!
-} yield ExitCode.Success
-```
-
-Notice that the `serve` method had a `IO.cancelBoundary` in its loop. That marks where the function
-will be actually cancelled (stopped). Also, we change its signature to pass the `stopFlag` instance
-so it can be passed to the `echoProtocol` method. Now, recall that `serve` runs in an infinite loop
-that accepts new connections. Shouldn't the call to `cancel` should in fact 'break' that loop? Thing
-is, that will happen when the loop reaches the `IO.cancelBoundary`. But what if the method is
-waiting for new connections in the `serverSocket.accept()` call? Well, in that case, the 
+Let's first define a new method `server` that instantiates the flag, runs the `serve` method in its
+own `Fiber` and waits on the flag to be set. Only when the flag is set the server fiber will be
+canceled.
 
 ```scala
+def server(serverSocket: ServerSocket): IO[ExitCode] = 
+  for {
+      stopFlag    <- MVar[IO].empty[Unit]
+      serverFiber <- serve(serverSocket, stopFlag).start // Server runs on its own Fiber
+      _           <- stopFlag.read                       // Blocked until 'stopFlag.put(())' is run
+      _           <- serverFiber.cancel                  // Stopping server!
+  } yield ExitCode.Success
 ```
 
+We also modify the main `run` method in `IOApp` so now it calls to `server`:
 
+```scala
+override def run(args: List[String]): IO[ExitCode] = {
 
+  def close(socket: ServerSocket): IO[Unit] =
+    IO{ socket.close() }.handleErrorWith(_ => IO.unit)
+
+  IO{ new ServerSocket(args.headOption.map(_.toInt).getOrElse(5432)) }
+    .bracket{
+      serverSocket => server(serverSocket) *> IO.pure(ExitCode.Success)
+    } {
+      serverSocket => close(serverSocket)  *> IO{ println("Finished server") }
+    }
+}
+```
+
+So `run` calls `server` which in turn calls `serve`. Do we need to modify `serve` as well? Yes, for
+two reasons:
+
+1. We need to pass the `stopFlag` to the `echoProtocol` method.
+2. When the `server` method returns the `run` method will close the server socket. That will cause the
+   `serverSocket.accept()` in `serve` to throw an exception. We could handle it as any other
+   exception... but that would show an error message in console, while in fact this is a
+   'controlled' shutdown. So we should instead control what caused the exception.
+
+This is how we implement `serve` now:
+
+```scala
+def serve(serverSocket: ServerSocket, stopFlag: MVar[IO, Unit]): IO[Unit] = {
+
+  def close(socket: Socket): IO[Unit] = 
+    IO{ socket.close() }.handleErrorWith(_ => IO.unit)
+
+  for {
+    _       <- IO.cancelBoundary
+    socketE <- IO{ serverSocket.accept() }.attempt
+    _       <- socketE match {
+      case Right(socket) =>
+        for { // accept() succeeded, we attend the client in its own Fiber
+          _ <- echoProtocol(socket, stopFlag)
+                 .guarantee(close(socket))   // We close the server whatever happens
+                 .start                      // Client attended by its own Fiber
+          _ <- serve(serverSocket, stopFlag) // Looping back to the beginning
+        } yield ()
+      case Left(e) =>
+        for { // accept() failed, stopFlag will tell us whether this is a graceful shutdown
+          isEmpty <- stopFlag.isEmpty
+          _       <- if(!isEmpty) IO.unit    // stopFlag is set, nothing to do
+                     else IO.raiseError(e)   // stopFlag not set, must raise error
+        } yield ()
+    }
+  } yield ()
+}
+```
+
+This new implementation of `serve` does not just calls `accept()` inside an `IO`. It also uses
+`attempt`, which returns an instance of `Either` (`Either[Throwable, Socket]` in this case). We can
+then check the value of that `Either` to verify if the `accept` was successful, and in case of error
+deciding what to do depending on whether the `stopFlag` is set or not.
+
+There is only one step missing, modifying `echoLoop`. The only relevant changes are two: modifying
+the signature to pass the `stopFlag` flag; and in the `loop` function checking whether the line from
+the client equals `STOP`, in such case the flag we will set and the function will be finished. The
+final code looks as follows:
+
+```scala
+package tutorial
+
+import cats.effect._
+import cats.effect.concurrent.MVar
+import cats.implicits._
+
+import java.io._
+import java.net._
+
+object StoppableServer extends IOApp {
+
+  def echoProtocol(clientSocket: Socket, stopFlag: MVar[IO, Unit]): IO[Unit] = {
+  
+    def close(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = 
+      (IO{reader.close()}, IO{writer.close()})
+        .tupled                        // From (IO[Unit], IO[Unit]) to IO[(Unit, Unit)]
+        .map(_ => ())                  // From IO[(Unit, Unit)] to IO[Unit]
+        .handleErrorWith(_ => IO.unit) // Swallowing up any possible error
+  
+    def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = 
+      for {
+        _    <- IO.cancelBoundary
+        line <- IO{ reader.readLine() }
+        _    <- line match {
+                  case "STOP" => stopFlag.put(())
+                  case ""     => IO.unit // Empty line, we are done
+                  case _      => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
+                }
+      } yield ()
+  
+    (IO{ new BufferedReader(new InputStreamReader(clientSocket.getInputStream())) },
+     IO{ new BufferedWriter(new PrintWriter(clientSocket.getOutputStream())) })
+      .tupled       // From (IO[BufferedReader], IO[BufferedWriter]) to IO[(BufferedReader, BufferedWriter)]
+      .bracket {
+        case (reader, writer) => loop(reader, writer)  // Let's get to work!
+      } {
+        case (reader, writer) => close(reader, writer) // We are done, closing the streams
+      }
+  }
+
+  def serve(serverSocket: ServerSocket, stopFlag: MVar[IO, Unit]): IO[Unit] = {
+
+    def close(socket: Socket): IO[Unit] = 
+      IO{ socket.close() }.handleErrorWith(_ => IO.unit)
+
+    for {
+      _       <- IO.cancelBoundary
+      socketE <- IO{ serverSocket.accept() }.attempt
+      _       <- socketE match {
+        case Right(socket) =>
+          for { // accept() succeeded, we attend the client in its own Fiber
+            _ <- echoProtocol(socket, stopFlag)
+                   .guarantee(close(socket))   // We close the server whatever happens
+                   .start                      // Client attended by its own Fiber
+            _ <- serve(serverSocket, stopFlag) // Looping back to the beginning
+          } yield ()
+        case Left(e) =>
+          for { // accept() failed, stopFlag will tell us whether this is a graceful shutdown
+            isEmpty <- stopFlag.isEmpty
+            _       <- if(!isEmpty) IO.unit    // stopFlag is set, nothing to do
+                       else IO.raiseError(e)   // stopFlag not set, must raise error
+          } yield ()
+      }
+    } yield ()
+  }
+
+  def server(serverSocket: ServerSocket): IO[ExitCode] = 
+    for {
+      stopFlag    <- MVar[IO].empty[Unit]
+      serverFiber <- serve(serverSocket, stopFlag).start
+      _           <- stopFlag.read
+      _           <- serverFiber.cancel
+    } yield ExitCode.Success
+
+  override def run(args: List[String]): IO[ExitCode] = {
+
+    def close(socket: ServerSocket): IO[Unit] =
+      IO{ socket.close() }.handleErrorWith(_ => IO.unit)
+
+    IO{ new ServerSocket(args.headOption.map(_.toInt).getOrElse(5432)) }
+      .bracket {
+        serverSocket => server(serverSocket) *> IO.pure(ExitCode.Success)
+      } {
+        serverSocket => close(serverSocket)  *> IO{ println("Finished server") }
+      }
+  }
+}
+```
+
+If you run the server coded above, open a telnet session against it and send an `STOP` message you
+will see how the server finishes properly.
+
+But there is a catch yet. If there are several clients connected, sending an `STOP` message will
+close the server's `Fiber` and the one attending the client that sent the message. But the other
+`Fiber`s will keep running normally! Arguably, we could expect that shutting down the server shall
+close _all_ connections. How could we do it? Solving that is the proposed final exercise below.
+
+Final exercise
+--------------
+We need to close all connections with clients when the server is shut down. To do that we can
+call `cancel` on each one of the `Fiber` instances we have created to attend each new client. But
+how? After all, we are not tracking which `Fiber`s are running at any given time.
+
+We could keep a list of active `Fiber`s serving client connections. It is doable, but cumbersome...
+and not really needed at this point.
+
+Think about it: we have a `stopFlag` that signals when the server must be stopped. When that flag is
+set we can assume we shall close all client connections too. Thus  what we need to do is, every time
+we create a new `Fiber` to attend some new client, we also make sure that when `stopFlag` is set
+that `Fiber` is cancelled. As `Fiber` instances are very light we can create a new instance just to
+wait for `stopFlag.read` and then cancelling the client's own `Fiber`. This is how the `serve`
+method will look like now with that change:
+
+```scala
+def serve(serverSocket: ServerSocket, stopFlag: MVar[IO, Unit]): IO[Unit] = {
+
+  def close(socket: Socket): IO[Unit] = 
+    IO{ socket.close() }.handleErrorWith(_ => IO.unit)
+
+  for {
+    _       <- IO.cancelBoundary
+    socketE <- IO{ serverSocket.accept() }.attempt
+    _       <- socketE match {
+      case Right(socket) =>
+        for { // accept() succeeded, we attend the client in its own Fiber
+          fiber <- echoProtocol(socket, stopFlag)
+                     .guarantee(close(socket))     // We close the server whatever happens
+                     .start                        // Client attended by its own Fiber
+          _     <- (stopFlag.read *> fiber.cancel)
+                    .start                         // Another Fiber to cancel the client when stopFlag is set
+          _     <- serve(serverSocket, stopFlag)   // Looping back to the beginning
+        } yield ()
+      case Left(e) =>
+        for { // accept() failed, stopFlag will tell us whether this is a graceful shutdown
+          isEmpty <- stopFlag.isEmpty
+          _       <- if(!isEmpty) IO.unit  // stopFlag is set, nothing to do
+                     else IO.raiseError(e) // stopFlag not set, must raise error
+        } yield ()
+    }
+  } yield ()
+  }
+```
+
+But note that will close the client socket, which will raise an exception in the `reader.readLine()`
+call in the `loop` method of `echoProtocol`. As it happened before with the server socket, the
+exception will be shown as an ugly error message in the console. To prevent this we modify the
+`loop` function so it uses `attempt` to control possible errors. If some error is detected first the
+state of `stopFlag` is checked, and if it is set a graceful shutdown is assumed and no action is
+taken; otherwise the error is raised:
+
+```scala
+def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] = 
+  for {
+    _     <- IO.cancelBoundary
+    lineE <- IO{ reader.readLine() }.attempt
+    _     <- lineE match {
+               case Right(line) => line match {
+                 case "STOP" => stopFlag.put(())
+                 case ""     => IO.unit // Empty line, we are done
+                 case _      => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
+               }
+               case Left(e) =>
+                 for { // readLine() failed, stopFlag will tell us whether this is a graceful shutdown
+                   isEmpty <- stopFlag.isEmpty
+                   _       <- if(!isEmpty) IO.unit  // stopFlag is set, nothing to do
+                              else IO.raiseError(e) // stopFlag not set, must raise error
+                 } yield ()
+             }
+  } yield ()
+```

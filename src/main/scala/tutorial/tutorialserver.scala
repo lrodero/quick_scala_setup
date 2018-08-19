@@ -54,7 +54,7 @@ object Server extends IOApp {
     def close(socket: ServerSocket): IO[Unit] =
       IO{ socket.close() }.handleErrorWith(_ => IO.unit)
   
-    IO{ new ServerSocket(5432) }
+    IO{ new ServerSocket(args.headOption.map(_.toInt).getOrElse(5432)) }
       .bracket{
         serverSocket => serve(serverSocket) *> IO.pure(ExitCode.Success)
       } {
