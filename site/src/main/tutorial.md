@@ -712,7 +712,7 @@ def serve(serverSocket: ServerSocket, stopFlag: MVar[IO, Unit]): IO[Unit] = {
                      .guarantee(close(socket))     // We close the server whatever happens
                      .start                        // Client attended by its own Fiber
           _     <- (stopFlag.read *> fiber.cancel)
-                     .start                         // Another Fiber to cancel the client when stopFlag is set
+                     .start                        // Another Fiber to cancel the client when stopFlag is set
           _     <- serve(serverSocket, stopFlag)   // Looping back to the beginning
         } yield ()
       case Left(e) =>
