@@ -23,8 +23,8 @@ object StoppableServer2 extends IOApp {
         lineE <- IO{ reader.readLine() }.attempt
         _     <- lineE match {
                    case Right(line) => line match {
-                     case "STOP" => stopFlag.put(())
-                     case ""     => IO.unit // Empty line, we are done
+                     case "STOP" => stopFlag.put(()) // Returns IO[Unit], which is handy as we are done here
+                     case ""     => IO.unit          // Empty line, we are done
                      case _      => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
                    }
                    case Left(e) =>

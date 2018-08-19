@@ -22,8 +22,8 @@ object StoppableServer extends IOApp {
         _    <- IO.cancelBoundary
         line <- IO{ reader.readLine() }
         _    <- line match {
-                  case "STOP" => stopFlag.put(())
-                  case ""     => IO.unit // Empty line, we are done
+                  case "STOP" => stopFlag.put(()) // Returns IO[Unit], which is handy as we are done here
+                  case ""     => IO.unit          // Empty line, we are done
                   case _      => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
                 }
       } yield ()

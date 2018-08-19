@@ -602,10 +602,10 @@ def serve(serverSocket: ServerSocket, stopFlag: MVar[IO, Unit]): IO[Unit] = {
 }
 ```
 
-This new implementation of `serve` does not just calls `accept()` inside an
+This new implementation of `serve` does not just call `accept()` inside an
 `IO`. It also uses `attempt`, which returns an instance of `Either`
 (`Either[Throwable, Socket]` in this case). We can then check the value of that
-`Either` to verify if the `accept` was successful, and in case of error
+`Either` to verify if the `accept()` call was successful, and in case of error
 deciding what to do depending on whether the `stopFlag` is set or not.
 
 There is only one step missing, modifying `echoLoop`. The only relevant changes
@@ -639,8 +639,8 @@ object StoppableServer extends IOApp {
         _    <- IO.cancelBoundary
         line <- IO{ reader.readLine() }
         _    <- line match {
-                  case "STOP" => stopFlag.put(())
-                  case ""     => IO.unit // Empty line, we are done
+                  case "STOP" => stopFlag.put(()) // Returns IO[Unit], which is handy as we are done here
+                  case ""     => IO.unit          // Empty line, we are done
                   case _      => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
                 }
       } yield ()
@@ -709,10 +709,10 @@ If you run the server coded above, open a telnet session against it and send an
 
 But there is a catch yet. If there are several clients connected, sending an
 `STOP` message will close the server's `Fiber` and the one attending the client
-that sent the message. But the other `Fiber`s will keep running normally!
-Arguably, we could expect that shutting down the server shall close _all_
-connections. How could we do it? Solving that issue is the proposed final
-exercise below.
+that sent the message. But the other `Fiber`s will keep running normally! It is
+like they were daemon threads. Arguably, we could expect that shutting down the
+server shall close _all_ connections. How could we do it? Solving that issue is
+the proposed final exercise below.
 
 Final exercise
 --------------
@@ -778,8 +778,8 @@ def loop(reader: BufferedReader, writer: BufferedWriter): IO[Unit] =
     lineE <- IO{ reader.readLine() }.attempt
     _     <- lineE match {
                case Right(line) => line match {
-                 case "STOP" => stopFlag.put(())
-                 case ""     => IO.unit // Empty line, we are done
+                 case "STOP" => stopFlag.put(()) // Returns IO[Unit], which is handy as we are done here
+                 case ""     => IO.unit          // Empty line, we are done
                  case _      => IO{ writer.write(line); writer.newLine(); writer.flush() } *> loop(reader, writer)
                }
                case Left(e) =>
