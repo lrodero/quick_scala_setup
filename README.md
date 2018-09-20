@@ -1,4 +1,3 @@
-# Quick Scala Setup
-Quick sbt-based Scala setup to be used:
-* For quick experimentation of new ideas/technologies in new branches
-* As the basis of _proper_ new Scala/sbt projects, by cloning this repo
+# Scala with cats book
+
+Exercises and code snippets of ['Scala with cats' book](https://underscore.io/books/scala-with-cats/)
