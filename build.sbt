@@ -13,6 +13,7 @@ scalacOptions ++= Seq(
   "-unchecked",
   "-language:postfixOps",
   "-language:higherKinds",
+  "-language:implicitConversions",
   "-Xfatal-warnings",
   "-Ypartial-unification")
 

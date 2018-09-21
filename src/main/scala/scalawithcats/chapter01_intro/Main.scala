@@ -23,7 +23,24 @@ object JsonWriter {
       ("email" -> JsString(value.email))
     ))
   }
+
+  implicit class JsonWriterOps[A: JsonWriter](a: A) {
+    def toJson: Json = JsonWriter.toJson(a)
+  }
+
+  implicit def opJsonWriter[A: JsonWriter]: JsonWriter[Option[A]] = new JsonWriter[Option[A]] {
+    override def write(oa: Option[A]): Json = 
+      oa match {
+        case None => JsNull
+        case Some(a) => a.toJson
+      }
+  }
+
+  implicit def toJson[A: JsonWriter](a: A): Json =
+    implicitly[JsonWriter[A]].write(a)
+
 }
+
 
 object Main extends App {
 }
