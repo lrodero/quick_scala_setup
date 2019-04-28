@@ -1,5 +1,7 @@
 name := "cats-experiments"
 
+scalaVersion := "2.12.8"
+
 version := "0.1"
 
 libraryDependencies ++= Seq(
