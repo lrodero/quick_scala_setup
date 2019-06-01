@@ -20,6 +20,11 @@ project/plugins/project/
 # Idea specific
 .idea/
 
+# Metals specific
+.metals/
+
 # Ensime specific
 .ensime
 .ensime_cache/
+
+.bloop/
