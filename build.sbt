@@ -17,4 +17,6 @@ scalacOptions ++= Seq(
   "-Xfatal-warnings",
   "-Ypartial-unification")
 
+addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3") // For things like MyValidate[E, *]
+
 
